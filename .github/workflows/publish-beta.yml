@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-        - 'Pek.BaoTa/**'
+        - 'DH.ApiGateWay/**'
   workflow_dispatch:
 
 jobs:
@@ -23,10 +23,10 @@ jobs:
           10.x
     - name: Restore
       run: |
-        dotnet restore Pek.BaoTa/Pek.BaoTa.csproj
+        dotnet restore DH.ApiGateWay/DH.ApiGateWay.csproj
     - name: Build
       run: |
-        dotnet pack --no-restore --version-suffix $(date "+%Y.%m%d-beta%H%M") -c Release -o out Pek.BaoTa/Pek.BaoTa.csproj
+        dotnet pack --no-restore --version-suffix $(date "+%Y.%m%d-beta%H%M") -c Release -o out DH.ApiGateWay/DH.ApiGateWay.csproj
     - name: Publish
       run: |
         dotnet nuget push ./out/*.nupkg --skip-duplicate --source https://api.nuget.org/v3/index.json --api-key ${{ secrets.nugetKey }}

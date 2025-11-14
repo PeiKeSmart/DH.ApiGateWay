@@ -36,33 +36,37 @@ public class SignUtil {
 
     private static string BuildStringToSign(string path, string method, Dictionary<string, string> headers, Dictionary<string, string> querys, Dictionary<string, string> bodys, List<string> signHeaderPrefixList)
     {
-        StringBuilder sb = new StringBuilder();
+        Span<char> initialBuffer = stackalloc char[512];
+        var builder = new ValueStringBuilder(initialBuffer);
 
-        sb.Append(method.ToUpper()).Append(Constants.LF);
+        builder.Append(method.ToUpper());
+        builder.Append(Constants.LF);
         if (headers.ContainsKey(HttpHeader.HTTP_HEADER_ACCEPT) && headers[HttpHeader.HTTP_HEADER_ACCEPT] != null)
         {
-            sb.Append(headers[HttpHeader.HTTP_HEADER_ACCEPT]);
+            builder.Append(headers[HttpHeader.HTTP_HEADER_ACCEPT]);
         }
-        sb.Append(Constants.LF);
+        builder.Append(Constants.LF);
         if (headers.ContainsKey(HttpHeader.HTTP_HEADER_CONTENT_MD5) && headers[HttpHeader.HTTP_HEADER_CONTENT_MD5] != null)
         {
-            sb.Append(headers[HttpHeader.HTTP_HEADER_CONTENT_MD5]);
+            builder.Append(headers[HttpHeader.HTTP_HEADER_CONTENT_MD5]);
         }
-        sb.Append(Constants.LF);
+        builder.Append(Constants.LF);
         if (headers.ContainsKey(HttpHeader.HTTP_HEADER_CONTENT_TYPE) && headers[HttpHeader.HTTP_HEADER_CONTENT_TYPE] != null)
         {
-            sb.Append(headers[HttpHeader.HTTP_HEADER_CONTENT_TYPE]);
+            builder.Append(headers[HttpHeader.HTTP_HEADER_CONTENT_TYPE]);
         }
-        sb.Append(Constants.LF);
+        builder.Append(Constants.LF);
         if (headers.ContainsKey(HttpHeader.HTTP_HEADER_DATE) && headers[HttpHeader.HTTP_HEADER_DATE] != null)
         {
-            sb.Append(headers[HttpHeader.HTTP_HEADER_DATE]);
+            builder.Append(headers[HttpHeader.HTTP_HEADER_DATE]);
         }
-        sb.Append(Constants.LF);
-        sb.Append(BuildHeaders(headers, signHeaderPrefixList));
-        sb.Append(BuildResource(path, querys, bodys));
+        builder.Append(Constants.LF);
+        builder.Append(BuildHeaders(headers, signHeaderPrefixList));
+        builder.Append(BuildResource(path, querys, bodys));
 
-        return sb.ToString();
+        string result = builder.ToString();
+        builder.Dispose();
+        return result;
     }
 
     /**
@@ -74,12 +78,14 @@ public class SignUtil {
      */
     private static string BuildResource(string path, Dictionary<string, string> querys, Dictionary<string, string> bodys)
     {
-        StringBuilder sb = new StringBuilder();
+        Span<char> initialBuffer = stackalloc char[256];
+        var builder = new ValueStringBuilder(initialBuffer);
         if (null != path)
         {
-            sb.Append(path);
+            builder.Append(path);
         }
-        StringBuilder sbParam = new StringBuilder();
+        Span<char> initialParamBuffer = stackalloc char[256];
+        var paramBuilder = new ValueStringBuilder(initialParamBuffer);
         IDictionary<string, string> sortParams = new SortedDictionary<string, string>(StringComparer.Ordinal);
 
         //query参与签名
@@ -110,23 +116,29 @@ public class SignUtil {
         {
             if (0 < param.Key.Length)
             {
-                if (0 < sbParam.Length)
+                if (0 < paramBuilder.Length)
                 {
-                    sbParam.Append("&");
+                    paramBuilder.Append("&");
                 }
-                sbParam.Append(param.Key);
+                paramBuilder.Append(param.Key);
                 if (!string.IsNullOrEmpty(param.Value))
                 {
-                    sbParam.Append("=").Append(param.Value);
+                    paramBuilder.Append('=');
+                    paramBuilder.Append(param.Value);
                 }
             }
         }
-        if (0 < sbParam.Length)
+        var paramSpan = paramBuilder.AsSpan();
+        if (paramSpan.Length > 0)
         {
-            sb.Append("?").Append(sbParam);
+            builder.Append('?');
+            builder.Append(paramSpan);
         }
 
-        return sb.ToString();
+        string result = builder.ToString();
+        paramBuilder.Dispose();
+        builder.Dispose();
+        return result;
     }
 
 
@@ -139,7 +151,8 @@ public class SignUtil {
     */
     private static string BuildHeaders(Dictionary<string, string> headers, List<string> signHeaderPrefixList)
     {
-        StringBuilder sb = new StringBuilder();
+        Span<char> initialHeaderBuffer = stackalloc char[256];
+        var sb = new ValueStringBuilder(initialHeaderBuffer);
 
         if (null != signHeaderPrefixList)
         {
@@ -157,13 +170,15 @@ public class SignUtil {
         if (null != headers)
         {
             IDictionary<string, string> sortedParams = new SortedDictionary<string, string>(headers, StringComparer.Ordinal);
-            StringBuilder signHeadersStringBuilder = new StringBuilder();
+            Span<char> initialSignHeaderBuffer = stackalloc char[128];
+            var signHeadersStringBuilder = new ValueStringBuilder(initialSignHeaderBuffer);
 
             foreach (var param in sortedParams)
             {
                 if (IsHeaderToSign(param.Key, signHeaderPrefixList))
                 {
-                    sb.Append(param.Key).Append(Constants.SPE2);
+                    sb.Append(param.Key);
+                    sb.Append(Constants.SPE2);
                     if (null != param.Value)
                     {
                         sb.Append(param.Value);
@@ -177,10 +192,13 @@ public class SignUtil {
                 }
             }
 
-            headers.Add(SystemHeader.X_CA_SIGNATURE_HEADERS, signHeadersStringBuilder.ToString());
+            string signHeaders = signHeadersStringBuilder.ToString();
+            signHeadersStringBuilder.Dispose();
+            headers.Add(SystemHeader.X_CA_SIGNATURE_HEADERS, signHeaders);
         }
-
-        return sb.ToString();
+        string result = sb.ToString();
+        sb.Dispose();
+        return result;
     }
 
 

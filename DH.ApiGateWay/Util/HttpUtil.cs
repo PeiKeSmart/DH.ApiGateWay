@@ -149,29 +149,10 @@ public class HttpUtil {
         // 处理请求体
         if (bodys != null && bodys.Count > 0)
         {
-            StringBuilder sb = new();
-            foreach (var param in bodys)
-            {
-                if (sb.Length > 0)
-                {
-                    sb.Append('&');
-                }
-                if (param.Value != null && param.Key.Length == 0)
-                {
-                    sb.Append(param.Value);
-                }
-                if (param.Key.Length > 0)
-                {
-                    sb.Append(param.Key).Append('=');
-                    if (param.Value != null)
-                    {
-                        sb.Append(HttpUtility.UrlEncode(param.Value, Encoding.UTF8));
-                    }
-                }
-            }
+            string bodyContent = BuildParameterString(bodys);
 
             // 创建内容
-            var content = new StringContent(sb.ToString(), Encoding.UTF8);
+            var content = new StringContent(bodyContent, Encoding.UTF8);
 
             // 修改这部分代码：处理 Content-Type
             if (headers.TryGetValue(HttpHeader.HTTP_HEADER_CONTENT_TYPE, out string contentTypeValue))
@@ -256,32 +237,10 @@ public class HttpUtil {
             url += path;
         }
 
-        if (querys != null && querys.Count > 0)
+        string queryString = BuildParameterString(querys);
+        if (!string.IsNullOrEmpty(queryString))
         {
-            StringBuilder sb = new();
-            foreach (var param in querys)
-            {
-                if (sb.Length > 0)
-                {
-                    sb.Append('&');
-                }
-                if (param.Value != null && param.Key == null)
-                {
-                    sb.Append(param.Value);
-                }
-                if (param.Key != null)
-                {
-                    sb.Append(param.Key).Append('=');
-                    if (param.Value != null)
-                    {
-                        sb.Append(HttpUtility.UrlEncode(param.Value, Encoding.UTF8));
-                    }
-                }
-            }
-            if (sb.Length > 0)
-            {
-                url = url + "?" + sb.ToString();
-            }
+            url = string.Concat(url, "?", queryString);
         }
 
         return url;
@@ -320,5 +279,53 @@ public class HttpUtil {
     public static bool CheckValidationResult(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors errors)
     {
         return true;
+    }
+
+    private static string BuildParameterString(Dictionary<String, String>? parameters)
+    {
+        if (parameters == null || parameters.Count == 0)
+        {
+            return string.Empty;
+        }
+
+        Span<char> initialBuffer = stackalloc char[256];
+        var builder = new ValueStringBuilder(initialBuffer);
+
+        foreach (var param in parameters)
+        {
+            if (builder.Length > 0)
+            {
+                builder.Append('&');
+            }
+
+            if (param.Value != null && param.Key == null)
+            {
+                builder.Append(param.Value);
+                continue;
+            }
+
+            if (param.Key != null)
+            {
+                if (param.Key.Length == 0)
+                {
+                    if (param.Value != null)
+                    {
+                        builder.Append(param.Value);
+                    }
+                    continue;
+                }
+
+                builder.Append(param.Key);
+                builder.Append('=');
+                if (param.Value != null)
+                {
+                    builder.Append(HttpUtility.UrlEncode(param.Value, Encoding.UTF8));
+                }
+            }
+        }
+
+        string result = builder.ToString();
+        builder.Dispose();
+        return result;
     }
 }
