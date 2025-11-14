@@ -1,4 +1,4 @@
-﻿namespace DH.Iot.Constant;
+﻿namespace DH.ApiGateWay.Constant;
 
 public class HttpMethod {
     //GET

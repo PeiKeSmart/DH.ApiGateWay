@@ -1,8 +1,8 @@
-using NewLife.Log;
+﻿using NewLife.Log;
 using System.Collections.Concurrent;
 using System.Threading;
 
-namespace DH.Iot.Util;
+namespace DH.ApiGateWay.Util;
 
 /// <summary>
 /// HTTP请求计数器，用于统计每天通过HttpUtil发起的请求数量

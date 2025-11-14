@@ -1,9 +1,9 @@
-﻿using DH.Iot.Constant;
-
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
 
-namespace DH.Iot.Util;
+using DH.ApiGateWay.Constant;
+
+namespace DH.ApiGateWay.Util;
 
 public class SignUtil {
     public static string Sign(string path, string method, string secret, Dictionary<string, string> headers, Dictionary<string, string> querys, Dictionary<string, string> bodys, List<string> signHeaderPrefixList)

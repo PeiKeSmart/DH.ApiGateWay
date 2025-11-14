@@ -1,6 +1,6 @@
 ﻿using System.Globalization;
 
-namespace DH.Iot.Util;
+namespace DH.ApiGateWay.Util;
 
 public class DateUtil {
     private const string ISO8601_DATE_FORMAT = "yyyy-MM-dd'T'HH:mm:ss'Z'";

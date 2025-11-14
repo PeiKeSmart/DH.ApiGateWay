@@ -1,7 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 
-namespace DH.Iot.Util;
+namespace DH.ApiGateWay.Util;
 
 public class MessageDigestUtil {
     public static string Base64AndMD5(string input)

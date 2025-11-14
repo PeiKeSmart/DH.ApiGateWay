@@ -1,4 +1,4 @@
-﻿namespace DH.Iot.Constant;
+﻿namespace DH.ApiGateWay.Constant;
 
 public class SystemHeader {
     //签名Header

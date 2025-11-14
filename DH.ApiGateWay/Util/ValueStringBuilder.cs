@@ -1,7 +1,6 @@
-using System;
-using System.Buffers;
+﻿using System.Buffers;
 
-namespace DH.Iot.Util;
+namespace DH.ApiGateWay.Util;
 
 internal ref struct ValueStringBuilder
 {

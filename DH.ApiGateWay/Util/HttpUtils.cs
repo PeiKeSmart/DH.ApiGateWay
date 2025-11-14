@@ -1,15 +1,16 @@
-﻿using DH.Iot.Constant;
-
-using NewLife.Log;
-using NewLife.Serialization;
-
-using System.Net;
+﻿using System.Net;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Web;
 
-using HttpMethod = DH.Iot.Constant.HttpMethod;
+using DH.ApiGateWay.Constant;
+using DH.ApiGateWay.Util;
+
+using NewLife.Log;
+using NewLife.Serialization;
+
+using HttpMethod = DH.ApiGateWay.Constant.HttpMethod;
 
 namespace DH.Iot.Util;
 

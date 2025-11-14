@@ -1,4 +1,4 @@
-﻿namespace DH.Iot.Constant;
+﻿namespace DH.ApiGateWay.Constant;
 
 public class Constants {
     //签名算法HmacSha256

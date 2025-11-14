@@ -1,4 +1,4 @@
-﻿namespace DH.Iot.Util;
+﻿namespace DH.ApiGateWay.Util;
 
 public class DictionaryUtil {
     public static void Add<T>(Dictionary<string, string> dic, string key, T value)
