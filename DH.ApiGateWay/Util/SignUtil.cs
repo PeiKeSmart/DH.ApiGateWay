@@ -1,5 +1,4 @@
 ﻿using System.Security.Cryptography;
-using System.Buffers;
 using System.Text;
 
 using DH.ApiGateWay.Constant;
@@ -29,78 +28,17 @@ public class SignUtil {
         //    XTrace.WriteLine($"Sign数据SignHeaderPrefixList:{item}");
         //}
 
-        // 使用 ArrayPool 减少中间 byte[] 分配
-        Span<char> initialBuffer = stackalloc char[512];
-        var builder = new ValueStringBuilder(initialBuffer);
-        BuildStringToSign(builder, path, method, headers, querys, bodys, signHeaderPrefixList);
-        var span = builder.AsSpan();
-
-        // 把 secret 编码到租用缓冲
-        int maxKeyBytes = Encoding.UTF8.GetMaxByteCount(secret.Length);
-        byte[] keyBuf = ArrayPool<byte>.Shared.Rent(maxKeyBytes);
-        int keyLen = Encoding.UTF8.GetBytes(secret, 0, secret.Length, keyBuf, 0);
-
-        // 把签名字符串编码到租用缓冲
-        int maxSignBytes = Encoding.UTF8.GetMaxByteCount(span.Length);
-        byte[] signBuf = ArrayPool<byte>.Shared.Rent(maxSignBytes);
-        int signLen = Encoding.UTF8.GetBytes(span, signBuf);
-
-        try
-        {
-            using var algorithm = new HMACSHA256();
-            // 将 keyBuf 前 keyLen 部分复制到长度准确的数组并赋值给算法
-            byte[] realKey = new byte[keyLen];
-            Buffer.BlockCopy(keyBuf, 0, realKey, 0, keyLen);
-            algorithm.Key = realKey;
-
-            // 计算摘要并生成签名
-            var hash = algorithm.ComputeHash(signBuf, 0, signLen);
-            var result = Convert.ToBase64String(hash);
-
-            // 清理 realKey 中的敏感数据
-            Array.Clear(realKey, 0, realKey.Length);
-
-            return result;
-        }
-        finally
-        {
-            builder.Dispose();
-            // 清理并归还租用缓冲。secret 涉及敏感信息，建议清零后归还
-            Array.Clear(keyBuf, 0, keyLen);
-            ArrayPool<byte>.Shared.Return(keyBuf);
-
-            Array.Clear(signBuf, 0, signLen);
-            ArrayPool<byte>.Shared.Return(signBuf);
-        }
+        using var algorithm = new HMACSHA256();
+        algorithm.Key = Encoding.UTF8.GetBytes(secret.ToCharArray());
+        string signStr = BuildStringToSign(path, method, headers, querys, bodys, signHeaderPrefixList);
+        return Convert.ToBase64String(algorithm.ComputeHash(Encoding.UTF8.GetBytes(signStr.ToCharArray())));
     }
 
-    /// <summary>
-    /// 调试用：验证当前 Sign 输出与基于字符串的老方式一致（用于回归检测）
-    /// </summary>
-    public static bool VerifySignConsistency(string path, string method, string secret, Dictionary<string, string> headers, Dictionary<string, string> querys, Dictionary<string, string> bodys, List<string> signHeaderPrefixList)
+    private static string BuildStringToSign(string path, string method, Dictionary<string, string> headers, Dictionary<string, string> querys, Dictionary<string, string> bodys, List<string> signHeaderPrefixList)
     {
-        // 使用当前实现获取签名
-        var s1 = Sign(path, method, secret, headers, querys, bodys, signHeaderPrefixList);
-
-        // 使用 builder 生成签名字符串，再使用简单的 Encoding/ComputeHash 计算签名（老实现的等价）
         Span<char> initialBuffer = stackalloc char[512];
         var builder = new ValueStringBuilder(initialBuffer);
-        // 使用 headers 的副本来重新构造待签名字符串，避免重复添加 X_CA_SIGNATURE_HEADERS 导致异常
-        var headersCopy = headers == null ? new Dictionary<string, string>() : new Dictionary<string, string>(headers, StringComparer.Ordinal);
-        BuildStringToSign(builder, path, method, headersCopy, querys, bodys, signHeaderPrefixList);
-        var signStr = builder.ToString();
-        builder.Dispose();
 
-        using var alg = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
-        var bs = Encoding.UTF8.GetBytes(signStr);
-        var hash = alg.ComputeHash(bs);
-        var s2 = Convert.ToBase64String(hash);
-
-        return s1 == s2;
-    }
-
-    private static void BuildStringToSign(ValueStringBuilder builder, string path, string method, Dictionary<string, string> headers, Dictionary<string, string> querys, Dictionary<string, string> bodys, List<string> signHeaderPrefixList)
-    {
         builder.Append(method.ToUpper());
         builder.Append(Constants.LF);
         if (headers.ContainsKey(HttpHeader.HTTP_HEADER_ACCEPT) && headers[HttpHeader.HTTP_HEADER_ACCEPT] != null)
@@ -123,8 +61,12 @@ public class SignUtil {
             builder.Append(headers[HttpHeader.HTTP_HEADER_DATE]);
         }
         builder.Append(Constants.LF);
-        BuildHeaders(builder, headers, signHeaderPrefixList);
-        BuildResource(builder, path, querys, bodys);
+        builder.Append(BuildHeaders(headers, signHeaderPrefixList));
+        builder.Append(BuildResource(path, querys, bodys));
+
+        string result = builder.ToString();
+        builder.Dispose();
+        return result;
     }
 
     /**
@@ -134,15 +76,17 @@ public class SignUtil {
      * @param formParamMap POST表单参数
      * @return 待签名Path+Query+FormParams
      */
-    private static void BuildResource(ValueStringBuilder builder, string path, Dictionary<string, string> querys, Dictionary<string, string> bodys)
+    private static string BuildResource(string path, Dictionary<string, string> querys, Dictionary<string, string> bodys)
     {
+        Span<char> initialBuffer = stackalloc char[256];
+        var builder = new ValueStringBuilder(initialBuffer);
         if (null != path)
         {
             builder.Append(path);
         }
-
-        // 聚合并排序参数，替换 SortedDictionary 以减少分配
-        var sortParams = new Dictionary<string, string>(StringComparer.Ordinal);
+        Span<char> initialParamBuffer = stackalloc char[256];
+        var paramBuilder = new ValueStringBuilder(initialParamBuffer);
+        IDictionary<string, string> sortParams = new SortedDictionary<string, string>(StringComparer.Ordinal);
 
         //query参与签名
         if (querys != null && querys.Count > 0)
@@ -167,36 +111,34 @@ public class SignUtil {
                 }
             }
         }
-        // 参数列表排序
-        if (sortParams.Count > 0)
+        //参数Key           
+        foreach (var param in sortParams)
         {
-            var keys = new List<string>(sortParams.Keys);
-            keys.Sort(StringComparer.Ordinal);
-
-            var first = true;
-            builder.Append('?');
-            foreach (var key in keys)
+            if (0 < param.Key.Length)
             {
-                if (!first)
+                if (0 < paramBuilder.Length)
                 {
-                    builder.Append('&');
+                    paramBuilder.Append("&");
                 }
-                first = false;
-
-                builder.Append(key);
-                var value = sortParams[key];
-                if (!string.IsNullOrEmpty(value))
+                paramBuilder.Append(param.Key);
+                if (!string.IsNullOrEmpty(param.Value))
                 {
-                    builder.Append('=');
-                    builder.Append(value);
+                    paramBuilder.Append('=');
+                    paramBuilder.Append(param.Value);
                 }
             }
-
-            // 将 ? 放在参数串前面
-            var paramSpan = builder.AsSpan();
-            // 不需要额外处理：已经直接写入 builder，Add ? only if we appended parameters directly
-            // But original implementation put ? before parameters - keep same
         }
+        var paramSpan = paramBuilder.AsSpan();
+        if (paramSpan.Length > 0)
+        {
+            builder.Append('?');
+            builder.Append(paramSpan);
+        }
+
+        string result = builder.ToString();
+        paramBuilder.Dispose();
+        builder.Dispose();
+        return result;
     }
 
 
@@ -207,9 +149,10 @@ public class SignUtil {
     * @param signHeaderPrefixList 自定义参与签名Header前缀
     * @return 待签名Http头
     */
-    private static void BuildHeaders(ValueStringBuilder builder, Dictionary<string, string> headers, List<string> signHeaderPrefixList)
+    private static string BuildHeaders(Dictionary<string, string> headers, List<string> signHeaderPrefixList)
     {
-        // 直接写入传入的 builder
+        Span<char> initialHeaderBuffer = stackalloc char[256];
+        var sb = new ValueStringBuilder(initialHeaderBuffer);
 
         if (null != signHeaderPrefixList)
         {
@@ -226,31 +169,26 @@ public class SignUtil {
         //Dictionary<String, String> headersToSign = new Dictionary<String, String>();            
         if (null != headers)
         {
-            // 替换 SortedDictionary：先把 headers 拷贝到临时字典，然后按 key 排序
-            var sorted = new Dictionary<string, string>(headers, StringComparer.Ordinal);
-            var keys = new List<string>(sorted.Keys);
-            keys.Sort(StringComparer.Ordinal);
-
+            IDictionary<string, string> sortedParams = new SortedDictionary<string, string>(headers, StringComparer.Ordinal);
             Span<char> initialSignHeaderBuffer = stackalloc char[128];
             var signHeadersStringBuilder = new ValueStringBuilder(initialSignHeaderBuffer);
 
-            foreach (var key in keys)
+            foreach (var param in sortedParams)
             {
-                if (IsHeaderToSign(key, signHeaderPrefixList))
+                if (IsHeaderToSign(param.Key, signHeaderPrefixList))
                 {
-                    var value = sorted[key];
-                    builder.Append(key);
-                    builder.Append(Constants.SPE2);
-                    if (null != value)
+                    sb.Append(param.Key);
+                    sb.Append(Constants.SPE2);
+                    if (null != param.Value)
                     {
-                        builder.Append(value);
+                        sb.Append(param.Value);
                     }
-                    builder.Append(Constants.LF);
+                    sb.Append(Constants.LF);
                     if (0 < signHeadersStringBuilder.Length)
                     {
                         signHeadersStringBuilder.Append(Constants.SPE1);
                     }
-                    signHeadersStringBuilder.Append(key);
+                    signHeadersStringBuilder.Append(param.Key);
                 }
             }
 
@@ -258,7 +196,9 @@ public class SignUtil {
             signHeadersStringBuilder.Dispose();
             headers.Add(SystemHeader.X_CA_SIGNATURE_HEADERS, signHeaders);
         }
-        return;
+        string result = sb.ToString();
+        sb.Dispose();
+        return result;
     }
 
 
