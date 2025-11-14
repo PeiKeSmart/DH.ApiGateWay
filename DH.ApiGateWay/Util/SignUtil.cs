@@ -1,5 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
+using System.Buffers;
 
 using DH.ApiGateWay.Constant;
 
@@ -28,10 +29,37 @@ public class SignUtil {
         //    XTrace.WriteLine($"Sign数据SignHeaderPrefixList:{item}");
         //}
 
-        using var algorithm = new HMACSHA256();
-        algorithm.Key = Encoding.UTF8.GetBytes(secret.ToCharArray());
+        // 生成签名字符串（保持原有逻辑和顺序）
         string signStr = BuildStringToSign(path, method, headers, querys, bodys, signHeaderPrefixList);
-        return Convert.ToBase64String(algorithm.ComputeHash(Encoding.UTF8.GetBytes(signStr.ToCharArray())));
+
+        // 将 secret 编码为字节（最小侵入：保留使用 exact-length key）
+        int maxKeyBytes = Encoding.UTF8.GetMaxByteCount(secret.Length);
+        byte[] rentedKey = ArrayPool<byte>.Shared.Rent(maxKeyBytes);
+        int keyLen = Encoding.UTF8.GetBytes(secret, 0, secret.Length, rentedKey, 0);
+        byte[] realKey = new byte[keyLen];
+        Buffer.BlockCopy(rentedKey, 0, realKey, 0, keyLen);
+
+        // 把签名字符串编码到租用缓冲，避免新分配数组
+        int maxSignBytes = Encoding.UTF8.GetMaxByteCount(signStr.Length);
+        byte[] rentedSign = ArrayPool<byte>.Shared.Rent(maxSignBytes);
+        int signLen = Encoding.UTF8.GetBytes(signStr, 0, signStr.Length, rentedSign, 0);
+
+        try
+        {
+            using var algorithm = new HMACSHA256(realKey);
+            var hash = algorithm.ComputeHash(rentedSign, 0, signLen);
+            return Convert.ToBase64String(hash);
+        }
+        finally
+        {
+            // 清理并归还缓冲
+            Array.Clear(rentedKey, 0, keyLen);
+            ArrayPool<byte>.Shared.Return(rentedKey);
+
+            Array.Clear(rentedSign, 0, signLen);
+            ArrayPool<byte>.Shared.Return(rentedSign);
+            Array.Clear(realKey, 0, realKey.Length);
+        }
     }
 
     private static string BuildStringToSign(string path, string method, Dictionary<string, string> headers, Dictionary<string, string> querys, Dictionary<string, string> bodys, List<string> signHeaderPrefixList)
