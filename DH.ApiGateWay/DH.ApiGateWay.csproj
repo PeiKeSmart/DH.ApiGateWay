@@ -5,8 +5,8 @@
     <AssemblyTitle>API网关客户端</AssemblyTitle>
     <Description>基于DH框架的API网关客户端。参考自阿里云</Description>
     <Company>湖北登灏科技有限公司</Company>
-    <Copyright>©2020-2025 湖北登灏科技有限公司</Copyright>
-    <VersionPrefix>4.16</VersionPrefix>
+    <Copyright>©2020-2026 湖北登灏科技有限公司</Copyright>
+    <VersionPrefix>4.22</VersionPrefix>
     <VersionSuffix>$([System.DateTime]::Now.ToString(`yyyy.MMdd`))</VersionSuffix>
     <Version>$(VersionPrefix).$(VersionSuffix)</Version>
     <FileVersion>$(Version)</FileVersion>
@@ -43,11 +43,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.201">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
-    <PackageReference Include="Pek.Common" Version="4.16.2025.1113" />
+    <PackageReference Include="Pek.Common" Version="4.22.2026.412-beta1141" />
   </ItemGroup>
 
   <ItemGroup>
